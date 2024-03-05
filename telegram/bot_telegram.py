@@ -1,17 +1,16 @@
 import telebot
 from deep_translator import GoogleTranslator
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton
-
+from telebot import types
 from bot_utils import transcribe_audio, answer_the_question
 
-TOKEN = ""
+TOKEN = "6920410900:AAFJQL1w2fpi7P99LsFIQ7Dqj_G8fbATwYE"
 
 available_languages = GoogleTranslator().get_supported_languages()
 
 bot = telebot.TeleBot(TOKEN)
 
 users_choice = {'language': 'en'}
-
+feedback_dict = {}
 
 @bot.message_handler(commands=['start'])
 def send_message(message):
@@ -31,7 +30,8 @@ def send_contacts(message):
                                       'Application Committee <b>Nizhny Novgorod</b> +7 (831) 432-78-76 pknn@hse.ru \n'
                                       'Application Committee <b>Saint Petersburg</b> +7 (812) 644-62-12 '
                                       'abitur-spb@hse.ru \n'
-                                      'Application Committee <b>Perm</b> +7 (342) 200 96 96 abitur.perm@hse.ru' , parse_mode='html')
+                                      'Application Committee <b>Perm</b> +7 (342) 200 96 96 abitur.perm@hse.ru',
+                     parse_mode='html')
 
 
 @bot.message_handler(commands=['choose_language'])
@@ -55,43 +55,54 @@ def process_language(message):
 
 @bot.message_handler(commands=['ask_question'])
 def answer_question(message):
-    markup = ReplyKeyboardMarkup(row_width=2)
-    markup.add(KeyboardButton("Record question"))
-    markup.add(KeyboardButton("Type question"))
-    msg = bot.send_message(message.chat.id,
-                           f"I'm ready to answer any question about HSE application process",
-                           parse_mode='html', reply_markup=markup)
-    bot.register_next_step_handler(msg, process_question)
+    bot.send_message(message.chat.id,
+                     "I'm ready to answer any question about HSE application process. \n"
+                     "You are able to type it in the "
+                     "chat or record",
+                     parse_mode='html')
+    bot.register_next_step_handler(message, answer_question_handler)
 
 
-def process_question(message):
-    if message.text == "Record question":
-        bot.send_message(message.chat.id, "Please record your question and send it.")
-        bot.register_next_step_handler(message, record_audio)
-    elif message.text == "Type question":
-        bot.send_message(message.chat.id, "Please type your question.")
-        bot.register_next_step_handler(message, type_question)
-    else:
-        msg = bot.send_message(message.chat.id,
-                         f"Please, choose one of the available options")
-        bot.register_next_step_handler(msg, process_question)
-
-
-def record_audio(message):
+def answer_question_handler(message):
     if message.voice:
         file_info = bot.get_file(message.voice.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         with open('../audio.ogg', 'wb') as new_file:
             new_file.write(downloaded_file)
         response = transcribe_audio('../audio.ogg', users_choice['language'])
-        bot.send_message(message.chat.id, response)
+        keyboard = types.InlineKeyboardMarkup()
+        like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
+        dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
+        keyboard.add(like_button, dislike_button)
+        bot.send_message(message.chat.id, response, reply_markup=keyboard)
+        bot.register_next_step_handler(message, answer_question_handler)
+    elif message.text:
+        response = answer_the_question(message.text, users_choice['language'])
+        keyboard = types.InlineKeyboardMarkup()
+        like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
+        dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
+        keyboard.add(like_button, dislike_button)
+        bot.send_message(message.chat.id, response, reply_markup=keyboard)
+        bot.register_next_step_handler(message, answer_question_handler)
     else:
-        bot.send_message(message.chat.id, "Please send a voice message.")
+        bot.send_message(message.chat.id,
+                         "Please, send either voice or text message!",
+                         parse_mode='html')
+        bot.register_next_step_handler(message, answer_question_handler)
 
 
-def type_question(message):
-    response = answer_the_question(message.text, users_choice['language'])
-    bot.send_message(message.chat.id, response)
-
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    if call.data.startswith('like_'):
+        message_id = int(call.data.split('_')[1])
+        feedback_dict.setdefault(message_id, 0)
+        feedback_dict[message_id] += 1
+        bot.answer_callback_query(call.id, "You liked the answer!")
+    elif call.data.startswith('dislike_'):
+        message_id = int(call.data.split('_')[1])
+        feedback_dict.setdefault(message_id, 0)
+        feedback_dict[message_id] -= 1
+        bot.answer_callback_query(call.id, "You disliked the answer!")
+    answer_question(call.message)
 
 bot.polling()
