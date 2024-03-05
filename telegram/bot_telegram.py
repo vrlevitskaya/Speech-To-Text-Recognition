@@ -3,7 +3,7 @@ from deep_translator import GoogleTranslator
 from telebot import types
 from bot_utils import transcribe_audio, answer_the_question
 
-TOKEN = "6920410900:AAFJQL1w2fpi7P99LsFIQ7Dqj_G8fbATwYE"
+TOKEN = ""
 
 available_languages = GoogleTranslator().get_supported_languages()
 
