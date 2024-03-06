@@ -9,8 +9,10 @@ available_languages = GoogleTranslator().get_supported_languages()
 
 bot = telebot.TeleBot(TOKEN)
 
-users_choice = {'language': 'en'}
+users_choice = {'language': 'en', 'campus':'Moscow'}
 feedback_dict = {}
+campuses = ["Moscow","Nizhny Novgorod", "Perm", "Saint Petersburg", "HSE online"]
+
 
 @bot.message_handler(commands=['start'])
 def send_message(message):
@@ -18,8 +20,10 @@ def send_message(message):
                      f"Hello, {message.from_user.first_name}! \n"
                      "I'm HSE Bot for applicants. \n"
                      "Default language is English. \n"
-                     "Use command /choose_language to choose the preferable language or \n"
-                     "/ask_question to ask your questions about HSE application process",
+                     "Use commands: \n"
+                     "/choose_language to choose the preferable language \n"
+                     "/choose_campus to choose the HSE campus you are looking at\n"
+                     "/ask_question to ask your questions about HSE application process\n",
                      parse_mode='html')
 
 
@@ -53,6 +57,35 @@ def process_language(message):
                      parse_mode='html')
 
 
+@bot.message_handler(commands=['choose_campus'])
+def change_campus(message):
+    bot.send_message(message.chat.id,
+                     "Please, type in the chat one HSE campus from the list below \n"
+                     "The default campus is <b>HSE Moscow</b> \n"
+                     "Available options:\n"
+                     "-Moscow\n"
+                     "-Nizhny Novgorod\n"
+                     "-Perm\n"
+                     "-Saint Petersburg\n"
+                     "-HSE online\n",
+                     parse_mode='html')
+    bot.register_next_step_handler(message, process_campus)
+
+
+def process_campus(message):
+    if message.text in campuses:
+        users_choice['campus'] = message.text
+        bot.send_message(message.chat.id,
+                     f"The chosen campus is <b>{users_choice['campus']}</b>",
+                     parse_mode='html')
+    else:
+        bot.send_message(message.chat.id,
+                         f"Please, type one of the options",
+                         parse_mode='html')
+        bot.register_next_step_handler(message, process_campus)
+
+
+
 @bot.message_handler(commands=['ask_question'])
 def answer_question(message):
     bot.send_message(message.chat.id,
@@ -69,21 +102,22 @@ def answer_question_handler(message):
         downloaded_file = bot.download_file(file_info.file_path)
         with open('../audio.ogg', 'wb') as new_file:
             new_file.write(downloaded_file)
-        response = transcribe_audio('../audio.ogg', users_choice['language'])
+        response = transcribe_audio('../audio.ogg', users_choice['language'], users_choice['campus'])
         keyboard = types.InlineKeyboardMarkup()
         like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
         dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
         keyboard.add(like_button, dislike_button)
         bot.send_message(message.chat.id, response, reply_markup=keyboard)
-        bot.register_next_step_handler(message, answer_question_handler)
+        bot.register_next_step_handler(message, answer_question)
     elif message.text:
-        response = answer_the_question(message.text, users_choice['language'])
+        translated = GoogleTranslator(source='auto', target='ru').translate(message.text)
+        response = answer_the_question(translated, users_choice['language'], users_choice['campus'])
         keyboard = types.InlineKeyboardMarkup()
         like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
         dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
         keyboard.add(like_button, dislike_button)
         bot.send_message(message.chat.id, response, reply_markup=keyboard)
-        bot.register_next_step_handler(message, answer_question_handler)
+        bot.register_next_step_handler(message, answer_question)
     else:
         bot.send_message(message.chat.id,
                          "Please, send either voice or text message!",
@@ -104,5 +138,6 @@ def callback_handler(call):
         feedback_dict[message_id] -= 1
         bot.answer_callback_query(call.id, "You disliked the answer!")
     answer_question(call.message)
+
 
 bot.polling()
