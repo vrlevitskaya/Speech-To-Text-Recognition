@@ -2,16 +2,17 @@ import telebot
 from deep_translator import GoogleTranslator
 from telebot import types
 from bot_utils import transcribe_audio, answer_the_question
+from gpt import write_questions_to_docx
 
-TOKEN = ""
+TOKEN = "6920410900:AAFJQL1w2fpi7P99LsFIQ7Dqj_G8fbATwYE"
 
 available_languages = GoogleTranslator().get_supported_languages()
 
 bot = telebot.TeleBot(TOKEN)
 
-users_choice = {'language': 'en', 'campus':'Moscow'}
+users_choice = {'language': 'en', 'campus': 'Moscow'}
 feedback_dict = {}
-campuses = ["Moscow","Nizhny Novgorod", "Perm", "Saint Petersburg", "HSE online"]
+campuses = ["Moscow", "Nizhny Novgorod", "Perm", "Saint Petersburg", "HSE online"]
 
 
 @bot.message_handler(commands=['start'])
@@ -76,14 +77,13 @@ def process_campus(message):
     if message.text in campuses:
         users_choice['campus'] = message.text
         bot.send_message(message.chat.id,
-                     f"The chosen campus is <b>{users_choice['campus']}</b>",
-                     parse_mode='html')
+                         f"The chosen campus is <b>{users_choice['campus']}</b>",
+                         parse_mode='html')
     else:
         bot.send_message(message.chat.id,
                          f"Please, type one of the options",
                          parse_mode='html')
         bot.register_next_step_handler(message, process_campus)
-
 
 
 @bot.message_handler(commands=['ask_question'])
@@ -96,6 +96,14 @@ def answer_question(message):
     bot.register_next_step_handler(message, answer_question_handler)
 
 
+def send_response(chat_id, response):
+    keyboard = types.InlineKeyboardMarkup()
+    like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{chat_id}")
+    dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{chat_id}")
+    keyboard.add(like_button, dislike_button)
+    bot.send_message(chat_id, response, reply_markup=keyboard)
+
+
 def answer_question_handler(message):
     if message.voice:
         file_info = bot.get_file(message.voice.file_id)
@@ -103,21 +111,12 @@ def answer_question_handler(message):
         with open('../audio.ogg', 'wb') as new_file:
             new_file.write(downloaded_file)
         response = transcribe_audio('../audio.ogg', users_choice['language'], users_choice['campus'])
-        keyboard = types.InlineKeyboardMarkup()
-        like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
-        dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
-        keyboard.add(like_button, dislike_button)
-        bot.send_message(message.chat.id, response, reply_markup=keyboard)
-        bot.register_next_step_handler(message, answer_question)
+        send_response(message.chat.id, response)
     elif message.text:
         translated = GoogleTranslator(source='auto', target='ru').translate(message.text)
         response = answer_the_question(translated, users_choice['language'], users_choice['campus'])
-        keyboard = types.InlineKeyboardMarkup()
-        like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{message.message_id}")
-        dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{message.message_id}")
-        keyboard.add(like_button, dislike_button)
-        bot.send_message(message.chat.id, response, reply_markup=keyboard)
-        bot.register_next_step_handler(message, answer_question)
+        write_questions_to_docx(message.text, response)
+        send_response(message.chat.id, response)
     else:
         bot.send_message(message.chat.id,
                          "Please, send either voice or text message!",

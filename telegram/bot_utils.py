@@ -1,14 +1,14 @@
 import whisper
 from deep_translator import GoogleTranslator
 from parser import get_text_from_google
-from telegram.gpt import generate_answer
-
+from telegram.gpt import generate_answer, write_questions_to_docx
 
 def transcribe_audio(file_path_micro, selected_language, campus='Moscow'):
     model = whisper.load_model("base")
     result = model.transcribe(file_path_micro)
     translated_question = GoogleTranslator(source='auto', target='ru').translate(result["text"])
     response = answer_the_question(translated_question, selected_language, campus)
+    write_questions_to_docx(result["text"], response)
     return response
 
 

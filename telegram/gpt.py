@@ -13,6 +13,13 @@ def read_docx(file_path):
     return content
 
 
+def write_questions_to_docx(question, answer):
+    doc = Document()
+    doc.add_paragraph("Question: " + question)
+    doc.add_paragraph("Answer: " + answer)
+    doc.save("interactions.docx")
+
+
 def translate_content(content):
     translated_content = []
     translator = GoogleTranslator(source='ru', target='en')
