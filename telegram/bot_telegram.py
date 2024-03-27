@@ -114,7 +114,7 @@ def answer_question_handler(message):
         send_response(message.chat.id, response)
     elif message.text:
         translated = GoogleTranslator(source='auto', target='ru').translate(message.text)
-        response = answer_the_question(translated, users_choice['language'], users_choice['campus'])
+        response = "Your answer" + answer_the_question(translated, users_choice['language'], users_choice['campus'])
         write_questions_to_docx(message.text, response)
         send_response(message.chat.id, response)
     else:
