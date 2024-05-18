@@ -6,11 +6,15 @@ from gpt import write_questions_to_docx
 
 TOKEN = "6920410900:AAFJQL1w2fpi7P99LsFIQ7Dqj_G8fbATwYE"
 
-available_languages = GoogleTranslator().get_supported_languages()
+available_languages = GoogleTranslator().get_supported_languages(as_dict=True)
+mes = ("Please, check the language code and type it again \n"
+       "Lang Dictionary:\n")
+for key, value in available_languages.items():
+    mes += f"{key}: {value}\n"
 
 bot = telebot.TeleBot(TOKEN)
 
-users_choice = {'language': 'en', 'campus': 'Moscow'}
+users_choice = {}
 feedback_dict = {}
 campuses = ["Moscow", "Nizhny Novgorod", "Perm", "Saint Petersburg", "HSE online"]
 
@@ -44,18 +48,38 @@ def change_language(message):
     bot.send_message(message.chat.id,
                      "Please, type in the chat the code of preferable language \n"
                      "For example, \n"
-                     "for Kazakh language - kk \n"
-                     "for French language - fr \n"
+                     "for Kazakh language - <b>kk</b> \n"
+                     "for Uzbek language - <b>uz</b> \n"
+                     "for Chinese (simplified) language - <b>zh-CN</b> \n"
+                     "for Chinese (traditional) language - <b>zh-TW</b> \n"
+                     "for Arabic language - <b>ar</b> \n"
                      "full list can be seen here https://en.m.wikipedia.org/wiki/List_of_ISO_639_language_codes",
                      parse_mode='html')
     bot.register_next_step_handler(message, process_language)
 
 
 def process_language(message):
-    users_choice['language'] = message.text.lower()
-    bot.send_message(message.chat.id,
-                     f"The chosen language is <b>{users_choice['language']}</b>",
-                     parse_mode='html')
+    chat_id = message.chat.id
+    if message.text in available_languages.values():
+        if chat_id in users_choice:
+            users_choice[chat_id]['language'] = message.text
+        else:
+            users_choice[chat_id] = {'language': message.text}
+        bot.send_message(message.chat.id,
+                         f"The chosen language is <b>{users_choice[chat_id]['language']}</b>",
+                         parse_mode='html')
+    else:
+        keyboard = types.InlineKeyboardMarkup()
+        available_languages_with_codes = types.InlineKeyboardButton(text='Available languages and their codes',
+                                                                    callback_data='language_codes_')
+        keyboard.add(available_languages_with_codes)
+        bot.send_message(message.chat.id,
+                         "Sorry, this language is not supported. \n"
+                         "Please, check list of supported languages, maybe there is typo in your message. \n"
+                         "\n",
+                         parse_mode='html',
+                         reply_markup=keyboard)
+        bot.register_next_step_handler(message, process_language)
 
 
 @bot.message_handler(commands=['choose_campus'])
@@ -74,10 +98,14 @@ def change_campus(message):
 
 
 def process_campus(message):
+    chat_id = message.chat.id
     if message.text in campuses:
-        users_choice['campus'] = message.text
+        if chat_id in users_choice:
+            users_choice[chat_id]['campus'] = message.text
+        else:
+            users_choice[chat_id] = {'campus': message.text}
         bot.send_message(message.chat.id,
-                         f"The chosen campus is <b>{users_choice['campus']}</b>",
+                         f"The chosen campus is <b>{users_choice[chat_id]['campus']}</b>",
                          parse_mode='html')
     else:
         bot.send_message(message.chat.id,
@@ -101,22 +129,28 @@ def send_response(chat_id, response):
     like_button = types.InlineKeyboardButton(text="👍 Like", callback_data=f"like_{chat_id}")
     dislike_button = types.InlineKeyboardButton(text="👎 Dislike", callback_data=f"dislike_{chat_id}")
     keyboard.add(like_button, dislike_button)
-    bot.send_message(chat_id, response, reply_markup=keyboard)
+    bot.send_message(chat_id, response, reply_markup=keyboard, parse_mode='Markdown')
 
 
 def answer_question_handler(message):
+    chat_id = message.chat.id
     if message.voice:
         file_info = bot.get_file(message.voice.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         with open('../audio.ogg', 'wb') as new_file:
             new_file.write(downloaded_file)
-        response = transcribe_audio('../audio.ogg', users_choice['language'], users_choice['campus'])
-        send_response(message.chat.id, response)
+        transcribed, responses = transcribe_audio('../audio.ogg', users_choice[chat_id].get('language', 'en'),
+                                                  users_choice[chat_id].get('campus', 'Moscow'))
+        for i in range(len(responses)):
+            write_questions_to_docx(transcribed, responses[i])
+            send_response(message.chat.id, responses[i])
     elif message.text:
         translated = GoogleTranslator(source='auto', target='ru').translate(message.text)
-        response = "Your answer" + answer_the_question(translated, users_choice['language'], users_choice['campus'])
-        write_questions_to_docx(message.text, response)
-        send_response(message.chat.id, response)
+        responses = answer_the_question(translated, users_choice[chat_id].get('language', 'en'),
+                                        users_choice[chat_id].get('campus', 'Moscow'))
+        for i in range(len(responses)):
+            write_questions_to_docx(message.text, responses[i])
+            send_response(message.chat.id, responses[i])
     else:
         bot.send_message(message.chat.id,
                          "Please, send either voice or text message!",
@@ -131,12 +165,17 @@ def callback_handler(call):
         feedback_dict.setdefault(message_id, 0)
         feedback_dict[message_id] += 1
         bot.answer_callback_query(call.id, "You liked the answer!")
+        answer_question(call.message)
     elif call.data.startswith('dislike_'):
         message_id = int(call.data.split('_')[1])
         feedback_dict.setdefault(message_id, 0)
         feedback_dict[message_id] -= 1
         bot.answer_callback_query(call.id, "You disliked the answer!")
-    answer_question(call.message)
+        answer_question(call.message)
+    elif call.data.startswith('language_codes_'):
+        bot.send_message(call.message.chat.id, text=mes)
+        bot.answer_callback_query(call.id)
+
 
 
 bot.polling()

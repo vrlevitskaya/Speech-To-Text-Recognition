@@ -5,8 +5,6 @@ from deep_translator import GoogleTranslator
 url = "http://localhost:1337/v1/chat/completions"
 
 
-
-
 def write_questions_to_docx(question, answer):
     doc = Document()
     doc.add_paragraph("Question: " + question)
@@ -25,7 +23,7 @@ def translate_content(content):
 
 def generate_answer(question, campus, dict_text):
     answer = []
-    content = ['link_0', 'link_1', 'link_2']
+    content = ['link_0']  # , 'link_1', 'link_2']
     for i in range(len(content)):
         cnt = dict_text[content[i]]
         body = {
