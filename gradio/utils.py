@@ -2,7 +2,7 @@ import whisper
 from deep_translator import GoogleTranslator
 
 
-def transcribe_audio(languages, file_path_micro):
+def transcribe_audio(file_path_micro, languages=None):
     model = whisper.load_model("base")
     result = model.transcribe(file_path_micro)
     selected_language = languages.lower()
