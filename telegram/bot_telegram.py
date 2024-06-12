@@ -3,9 +3,12 @@ from deep_translator import GoogleTranslator
 from telebot import types
 from bot_utils import transcribe_audio, answer_the_question
 from gpt import write_questions_to_docx
+import os
+from dotenv import load_dotenv
 
-TOKEN = "6920410900:AAFJQL1w2fpi7P99LsFIQ7Dqj_G8fbATwYE"
+load_dotenv()
 
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 available_languages = GoogleTranslator().get_supported_languages(as_dict=True)
 mes = ("Please, check the language code and type it again \n"
        "Lang Dictionary:\n")
